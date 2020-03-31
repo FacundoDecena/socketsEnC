@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <unistd.h>
 
 #define BUFFER_SIZE 256
 
@@ -11,15 +12,34 @@ void error(char *msg){
     exit(1);
 }
 
+void handleMessages(int sock){
+    int n;
+    // el servidor lee caracteres de la coneccion de socket en este buffer
+    char buffer[BUFFER_SIZE];
+    bzero(buffer, BUFFER_SIZE);
+    n = recv(sock, buffer, BUFFER_SIZE - 1, 0);
+    if (n < 0)
+        error("Error leyendo del socket");
+
+    char message[BUFFER_SIZE + 18];
+
+    strcpy(message,"Hola ");
+    strcat(message, buffer);
+    strcat(message,", bienvenido!\n");
+    printf("se comunicó %s\n", buffer);
+
+    n = send(sock, message, BUFFER_SIZE + 18, 0);
+    if (n < 0)
+        error("Error escribiendo al socket");
+}
+
+
 int main(int argc, char *argv[]){
     // sockdf y newsockfd son desciptores de archivo
     // portno guarda el numero del puerto en el que va a aceptar conecciones
     // clilen almacena el tamaño de la direccion del cliente
     // n es el valor de retorno para las llamadas de read() y write()
-    int sockfd, newsockfd, portno, clilen, n;
-
-    // el servidor lee caracteres de la coneccion de socket en este buffer
-    char buffer[BUFFER_SIZE];
+    int sockfd, newsockfd, portno, clilen, pid;
 
     // sockaddr_in es una estructura que contiene una direccion de internet
     struct sockaddr_in serv_addr, cli_addr;
@@ -60,27 +80,25 @@ int main(int argc, char *argv[]){
 
     // accept bloquea el proceso hasta que un cliente se conecta al servidor.
     clilen = sizeof(cli_addr);
-    newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-    if (newsockfd < 0)
-        error("Error en accept");
 
-    // Solo se llega a este punto si se logro una conexion con un cliente satisfactoriamente
-    bzero(buffer, BUFFER_SIZE);
-    n = recv(newsockfd, buffer, BUFFER_SIZE - 1, 0);
-    if (n < 0)
-        error("Error leyendo del socket");
+    while (1)
+    {   
+        newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+        if (newsockfd < 0)
+            error("Error en accept");
 
-    char message[BUFFER_SIZE + 18];
+        pid = fork();
+        if (pid < 0)
+            error("Error en fork");
+        if (pid == 0){
+            close(sockfd);
+            handleMessages(newsockfd);
+            exit(0);
+        } else {
+            close(newsockfd);
+        } 
 
-    strcpy(message,"Hola ");
-    strcat(message, buffer);
-    strcat(message,", bienvenido!\n");
-    printf("Hola %s, bienvenido!\n", buffer);
-
-    n = send(newsockfd, message, BUFFER_SIZE + 18, 0);
-    if (n < 0)
-        error("Error escribiendo al socket");
-
+    }
     return 0;
 
 }
